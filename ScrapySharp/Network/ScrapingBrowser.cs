@@ -27,6 +27,8 @@ namespace ScrapySharp.Network
             InitCookieContainer();
             UserAgent = FakeUserAgents.Chrome24;
             AllowAutoRedirect = true;
+            AvoidAsyncRequests = false;
+
             Language = CultureInfo.CreateSpecificCulture("EN-US");
             UseDefaultCookiesParser = true;
             IgnoreCookies = false;
@@ -269,7 +271,13 @@ namespace ScrapySharp.Network
         {
             referer = url;
             request.AllowAutoRedirect = AllowAutoRedirect;
-            var response = (HttpWebResponse) await request.GetResponseAsync();
+            HttpWebResponse response;
+
+            if (AvoidAsyncRequests)
+                response = (HttpWebResponse) request.GetResponse();
+            else
+                response = (HttpWebResponse) await request.GetResponseAsync();
+
             var headers = response.Headers;
 
             if (!IgnoreCookies)
@@ -334,7 +342,13 @@ namespace ScrapySharp.Network
 
             if (verb == HttpVerb.Post)
             {
-                var stream = await request.GetRequestStreamAsync();
+                Stream stream;
+
+                if (AvoidAsyncRequests)
+                    stream = request.GetRequestStream();
+                else
+                    stream = await request.GetRequestStreamAsync();
+
                 using (var writer = new StreamWriter(stream))
                 {
                     writer.Write(data);
@@ -431,6 +445,9 @@ namespace ScrapySharp.Network
 
             return builder.ToString();
         }
+
+        // on IIS servers, Request.GetAsyncResult (et al) often hang, use synchronous
+        public bool AvoidAsyncRequests { get; set; }
 
         public FakeUserAgent UserAgent { get; set; }
 
