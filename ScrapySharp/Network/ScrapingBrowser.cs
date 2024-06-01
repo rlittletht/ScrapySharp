@@ -25,7 +25,8 @@ namespace ScrapySharp.Network
         public ScrapingBrowser()
         {
             InitCookieContainer();
-            UserAgent = FakeUserAgents.Chrome24;
+            // UserAgent = FakeUserAgents.Chrome24;
+            UserAgent = FakeUserAgents.ModernEdge;
             AllowAutoRedirect = true;
             AvoidAsyncRequests = false;
 
@@ -69,12 +70,12 @@ namespace ScrapySharp.Network
                 return false;
 
             var noCacheHeaders = new[]
-                {
-                    "no-cache",
-                    "no-store",
-                    "max-age=0",
-                    "pragma: no-cache",
-                };
+                                 {
+                                     "no-cache",
+                                     "no-store",
+                                     "max-age=0",
+                                     "pragma: no-cache",
+                                 };
 
             return !noCacheHeaders.Contains(header.ToLowerInvariant());
         }
@@ -103,7 +104,7 @@ namespace ScrapySharp.Network
             var request = CreateRequest(url, HttpVerb.Get);
             return await GetResponseAsync(url, request, 0, new byte[0]);
         }
-        
+
         public Dictionary<string, string> Headers { get; private set; }
 
         public Encoding Encoding { get; set; }
@@ -119,30 +120,33 @@ namespace ScrapySharp.Network
             request.Method = ToMethod(verb);
             request.CookieContainer = cookieContainer;
             request.UserAgent = UserAgent.UserAgent;
+            request.Accept = "*/*";
             request.Proxy = Proxy;
+
             request.AutomaticDecompression = DecompressionMethods;
 
             request.Headers["Accept-Language"] = Language.Name;
-
+            // request.Headers["Accept-Encoding"] = "gzip, deflate";
+            request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
             if (Headers != null)
             {
-				foreach (var header in Headers)
-				{
-					if (header.Key.ToLower() == "accept")
-					{
-						request.Accept = header.Value;
-					}
-					else if (header.Key.ToLower() == "referer")
-					{
-						request.Referer = header.Value;
-					}
-					else
-					{
-						request.Headers[header.Key] = header.Value;
-					}
-				}
+                foreach (var header in Headers)
+                {
+                    if (header.Key.ToLower() == "accept")
+                    {
+                        request.Accept = header.Value;
+                    }
+                    else if (header.Key.ToLower() == "referer")
+                    {
+                        request.Referer = header.Value;
+                    }
+                    else
+                    {
+                        request.Headers[header.Key] = header.Value;
+                    }
+                }
 
-				Headers.Clear();
+                Headers.Clear();
             }
 
             request.CachePolicy = CachePolicy;
@@ -181,9 +185,14 @@ namespace ScrapySharp.Network
             var headers = request.Headers.AllKeys.Select(k => new KeyValuePair<string, string>(k, request.Headers[k])).ToList();
 
             if (responseStream == null)
-                return new WebPage(this, url, AutoDownloadPagesResources,
+                return new WebPage(
+                    this,
+                    url,
+                    AutoDownloadPagesResources,
                     new RawRequest(request.Method, request.RequestUri, request.ProtocolVersion, headers, requestBody, Encoding),
-                    new RawResponse(response.ProtocolVersion, response.StatusCode, response.StatusDescription, response.Headers, new byte[0], Encoding), Encoding, AutoDetectCharsetEncoding);
+                    new RawResponse(response.ProtocolVersion, response.StatusCode, response.StatusDescription, response.Headers, new byte[0], Encoding),
+                    Encoding,
+                    AutoDetectCharsetEncoding);
 
             var body = new MemoryStream();
             responseStream.CopyTo(body);
@@ -193,15 +202,23 @@ namespace ScrapySharp.Network
             body.Position = 0;
 
             var rawRequest = new RawRequest(request.Method, request.RequestUri, request.ProtocolVersion, headers, requestBody, Encoding);
-            var webPage = new WebPage(this, url, AutoDownloadPagesResources, rawRequest,
-                new RawResponse(response.ProtocolVersion, response.StatusCode, response.StatusDescription, response.Headers, body.ToArray(), Encoding), Encoding, AutoDetectCharsetEncoding);
+            var webPage = new WebPage(
+                this,
+                url,
+                AutoDownloadPagesResources,
+                rawRequest,
+                new RawResponse(response.ProtocolVersion, response.StatusCode, response.StatusDescription, response.Headers, body.ToArray(), Encoding),
+                Encoding,
+                AutoDetectCharsetEncoding);
 
             if (AllowMetaRedirect && !string.IsNullOrEmpty(response.ContentType) && response.ContentType.Contains("html") && iteration < 10)
             {
                 var html = content.ToHtmlNode();
                 var meta = html.CssSelect("meta")
-                    .FirstOrDefault(p => p.Attributes != null && p.Attributes.HasKeyIgnoreCase("HTTP-EQUIV")
-                                         && p.Attributes.GetIgnoreCase("HTTP-EQUIV").Equals("refresh", StringComparison.InvariantCultureIgnoreCase));
+                   .FirstOrDefault(
+                        p => p.Attributes != null
+                            && p.Attributes.HasKeyIgnoreCase("HTTP-EQUIV")
+                            && p.Attributes.GetIgnoreCase("HTTP-EQUIV").Equals("refresh", StringComparison.InvariantCultureIgnoreCase));
 
                 if (meta != null)
                 {
@@ -243,6 +260,15 @@ namespace ScrapySharp.Network
                 }
             }
 
+            // find content-encoding
+//            foreach (KeyValuePair<string, string> kvp in webPage.RawResponse.Headers)
+//            {
+//                if (kvp.Value == "gzip")
+//                {
+//
+//                }
+//            }
+
             return webPage;
         }
 
@@ -274,9 +300,9 @@ namespace ScrapySharp.Network
             HttpWebResponse response;
 
             if (AvoidAsyncRequests)
-                response = (HttpWebResponse) request.GetResponse();
+                response = (HttpWebResponse)request.GetResponse();
             else
-                response = (HttpWebResponse) await request.GetResponseAsync();
+                response = (HttpWebResponse)await request.GetResponseAsync();
 
             var headers = response.Headers;
 
@@ -286,14 +312,19 @@ namespace ScrapySharp.Network
                 if (!string.IsNullOrEmpty(cookiesExpression))
                 {
                     var cookieUrl =
-                        new Uri(string.Format("{0}://{1}:{2}/", response.ResponseUri.Scheme, response.ResponseUri.Host,
-                                              response.ResponseUri.Port));
+                        new Uri(
+                            string.Format(
+                                "{0}://{1}:{2}/",
+                                response.ResponseUri.Scheme,
+                                response.ResponseUri.Host,
+                                response.ResponseUri.Port));
                     if (UseDefaultCookiesParser)
                         cookieContainer.SetCookies(cookieUrl, cookiesExpression);
                     else
                         SetCookies(url, cookiesExpression);
                 }
             }
+
             return response;
         }
 
@@ -317,6 +348,7 @@ namespace ScrapySharp.Network
         {
             return ExecuteRequest(url, verb, GetHttpPostVars(data));
         }
+
         public async Task<WebResponse> ExecuteRequestAsync(Uri url, HttpVerb verb, NameValueCollection data)
         {
             return await ExecuteRequestAsync(url, verb, GetHttpPostVars(data));
@@ -330,8 +362,8 @@ namespace ScrapySharp.Network
         public async Task<WebResponse> ExecuteRequestAsync(Uri url, HttpVerb verb, string data, string contentType = null)
         {
             var path = string.IsNullOrEmpty(data)
-                              ? url.AbsoluteUri
-                              : (verb == HttpVerb.Get ? string.Format("{0}?{1}", url.AbsoluteUri, data) : url.AbsoluteUri);
+                ? url.AbsoluteUri
+                : (verb == HttpVerb.Get ? string.Format("{0}?{1}", url.AbsoluteUri, data) : url.AbsoluteUri);
 
             var request = CreateRequest(new Uri(path), verb);
 
@@ -372,8 +404,8 @@ namespace ScrapySharp.Network
         public async Task<WebPage> NavigateToPageAsync(Uri url, HttpVerb verb = HttpVerb.Get, string data = "", string contentType = null)
         {
             var path = string.IsNullOrEmpty(data)
-                              ? url.AbsoluteUri
-                              : (verb == HttpVerb.Get ? string.Format("{0}?{1}", url.AbsoluteUri, data) : url.AbsoluteUri);
+                ? url.AbsoluteUri
+                : (verb == HttpVerb.Get ? string.Format("{0}?{1}", url.AbsoluteUri, data) : url.AbsoluteUri);
 
             var request = CreateRequest(new Uri(path), verb);
 
@@ -407,23 +439,23 @@ namespace ScrapySharp.Network
 
         private static string ToMethod(HttpVerb verb)
         {
-			switch (verb)
+            switch (verb)
             {
                 case HttpVerb.Get:
                     return "GET";
-				case HttpVerb.Head:
-					return "HEAD";
-				case HttpVerb.Post:
+                case HttpVerb.Head:
+                    return "HEAD";
+                case HttpVerb.Post:
                     return "POST";
-				case HttpVerb.Put:
-					return "PUT";
-				case HttpVerb.Delete:
-					return "DELETE";
-				case HttpVerb.Trace:
-					return "TRACE";
-				case HttpVerb.Options:
-					return "OPTIONS";
-				default:
+                case HttpVerb.Put:
+                    return "PUT";
+                case HttpVerb.Delete:
+                    return "DELETE";
+                case HttpVerb.Trace:
+                    return "TRACE";
+                case HttpVerb.Options:
+                    return "OPTIONS";
+                default:
                     throw new ArgumentOutOfRangeException("verb");
             }
         }
